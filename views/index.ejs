@@ -1,14 +1,69 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+
+    <style>
+        .chessboard {
+            display: grid;
+            grid-template-rows: repeat(8, minmax(0, 1fr));
+            grid-template-columns: repeat(8, minmax(0, 1fr));
+            width: 400px;
+            height: 400px;
+            transform: rotate(0deg);
+        }
+
+        .flipped {
+            transform: rotate(180deg);
+        }
+
+        .square {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .square.light {
+            background-color: #f0d9b5;
+        }
+
+        .square.dark {
+            background-color: #b58863;
+        }
+
+        .piece.black {
+            color: black;
+        }
+
+        .piece.white {
+            color: white;
+            filter: drop-shadow(0 0 2px rgba(0, 0, 0, 1));
+        }
+
+        .piece {
+            font-size: 36px;
+            cursor: pointer;
+        }
+
+        .piece.draggable {
+            cursor: grab;
+        }
+
+        .dragging {
+            opacity: 0.5;
+        }
+
+        .flipped .piece {
+            transform: rotate(180deg);
+        }
+    </style>
 </head>
 
 <body>
-    <div class="w-full h-screen bg-zinc-900 flex items-center justify-center ">
+    <div class="w-full h-screen bg-zinc-900 flex items-center justify-center">
         <div class="chessboard w-96 h-96 bg-red-800"></div>
     </div>
 
@@ -22,6 +77,210 @@
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <script src="https://cdn.tailwindcss.com"></script>
-</body>
 
-</html>
+    </body>
+    </html> -->
+
+
+    <!DOCTYPE html>
+    <html lang="en">
+    
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Chess Game</title>
+    
+        <style>
+            .chessboard {
+                display: grid;
+                grid-template-rows: repeat(8, minmax(0, 1fr));
+                grid-template-columns: repeat(8, minmax(0, 1fr));
+                width: 400px;
+                height: 400px;
+                transform: rotate(0deg);
+            }
+    
+            .flipped {
+                transform: rotate(180deg);
+            }
+    
+            .square {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+    
+            .square.light {
+                background-color: #f0d9b5;
+            }
+    
+            .square.dark {
+                background-color: #b58863;
+            }
+    
+            .piece.black {
+                color: black;
+            }
+    
+            .piece.white {
+                color: white;
+                filter: drop-shadow(0 0 2px rgba(0, 0, 0, 1));
+            }
+    
+            .piece {
+                font-size: 36px;
+                cursor: pointer;
+            }
+    
+            .piece.draggable {
+                cursor: grab;
+            }
+    
+            .dragging {
+                opacity: 0.5;
+            }
+    
+            .flipped .piece {
+                transform: rotate(180deg);
+            }
+        </style>
+    </head>
+    
+    <body>
+        <div class="w-full h-screen bg-zinc-900 flex items-center justify-center">
+            <div class="chessboard"></div>
+        </div>
+    
+        <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"
+            integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO"
+            crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"
+            integrity="sha512-xRllwz2gdZciIB+AkEbeq+gVhX8VB8XsfqeFbUh+SzHlN96dEduwtTuVuc2u9EROlmW9+yhRlxjif66ORpsgVA=="
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script src="https://cdn.tailwindcss.com"></script>
+    
+        <script>
+            const socket = io();
+            const chess = new Chess();
+
+            const boardElement = document.querySelector(".chessboard");
+
+            let draggedPiece = null;
+            let sourceSquare = null;
+            let playerRole = null;
+
+            const renderBoard = () => {
+                const board = chess.board();
+                boardElement.innerHTML = "";
+                board.forEach((row, rowIndex) => {
+                    row.forEach((square, colIndex) => {
+                        const squareElement = document.createElement("div");
+                        squareElement.classList.add("square",
+                            (rowIndex + colIndex) % 2 === 0 ? "light" : "dark"
+                        );
+
+                        squareElement.dataset.row = rowIndex;
+                        squareElement.dataset.col = colIndex;
+
+                        if (square) {
+                            const pieceElement = document.createElement("div");
+                            pieceElement.classList.add("piece", square.color === 'w' ? "white" : "black");
+                            pieceElement.innerText = getPieceUnicode(square.color + square.type.toUpperCase());
+                            pieceElement.draggable = playerRole === square.color;
+
+                            pieceElement.addEventListener("dragstart", (e) => {
+                                if (pieceElement.draggable) {
+                                    draggedPiece = pieceElement;
+                                    sourceSquare = { row: rowIndex, col: colIndex };
+                                    e.dataTransfer.setData("text/plain", "");
+                                }
+                            });
+
+                            pieceElement.addEventListener("dragend", (e) => {
+                                draggedPiece = null;
+                                sourceSquare = null;
+                            });
+
+                            squareElement.appendChild(pieceElement);
+                        }
+
+                        squareElement.addEventListener("dragover", function (e) {
+                            e.preventDefault();
+                        });
+
+                        squareElement.addEventListener("drop", function (e) {
+                            e.preventDefault();
+                            if (draggedPiece) {
+                                const targetSquare = {
+                                    row: parseInt(this.dataset.row),
+                                    col: parseInt(this.dataset.col)
+                                };
+                                handleMove(sourceSquare, targetSquare);
+                            }
+                        });
+                        boardElement.appendChild(squareElement);
+                    });
+                });
+            };
+
+            const handleMove = (source, target) => {
+                const move = {
+                    from: convertCoordsToSquare(source.row, source.col),
+                    to: convertCoordsToSquare(target.row, target.col),
+                    promotion: 'q' // Always promote to a queen for simplicity
+                };
+                if (chess.move(move)) {
+                    renderBoard();
+                    socket.emit('move', move);
+                }
+            };
+
+            const convertCoordsToSquare = (row, col) => {
+                const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+                const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+                return files[col] + ranks[row];
+            };
+
+            const getPieceUnicode = (piece) => {
+                const unicodePieces = {
+                    wP: "♙",  // white pawn
+                    wR: "♖",  // white rook
+                    wN: "♘",  // white knight
+                    wB: "♗",  // white bishop
+                    wQ: "♕",  // white queen
+                    wK: "♔",  // white king
+                    bP: "♟",  // black pawn
+                    bR: "♜",  // black rook
+                    bN: "♞",  // black knight
+                    bB: "♝",  // black bishop
+                    bQ: "♛",  // black queen
+                    bK: "♚"   // black king
+                };
+                return unicodePieces[piece] || "";
+            };
+
+            socket.on("playerRole", function (role) {
+                playerRole = role;
+                renderBoard();
+            });
+
+            socket.on("spectatorRole", function () {
+                playerRole = null;
+                renderBoard();
+            });
+
+            socket.on("boardState", function (fen) {
+                chess.load(fen);
+                renderBoard();
+            });
+
+            socket.on("move", function (move) {
+                chess.move(move);
+                renderBoard();
+            });
+
+            renderBoard();
+        </script>
+    </body>
+    
+    </html>
